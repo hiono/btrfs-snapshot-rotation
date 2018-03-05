@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # Parse arguments:
 SOURCE=$1
 TARGET=$2
@@ -34,7 +33,6 @@ Example for anacrontab:
 7             30      weekly_snap     /usr/local/bin/btrfs-snapshot / /.btrfs weekly 5
 @monthly      90      monthly_snap    /usr/local/bin/btrfs-snapshot / /.btrfs monthly 3
 
-
 EOF
     exit
 }
@@ -55,19 +53,26 @@ if [ -n "$QUIET" ] && [ "x$QUIET" != "x-q"	] ; then
 	usage
 fi
 
-
 # $max_snap is the highest number of snapshots that will be kept for $SNAP.
 max_snap=$((COUNT -1))
 
 # Clean up older snapshots:
-for i in $(find "$TARGET"|sort |grep @"${SNAP}"\$|head -n -${max_snap}); do
-	cmd="btrfs subvolume delete $i"
+tempfile=$(mktemp)
+pushd $TARGET > /dev/null
+btrfs subvol list --sort=+path -o "$TARGET" | grep @"${SNAP}"\$ | head -n -${max_snap} > $tempfile
+popd > /dev/null
+cat $tempfile | while read LINE
+do
+	tl_num=$(echo ${LINE} | grep -P -o '(?<=top level )\b(\d+)\b')
+	top_level=$(cat /proc/mounts | grep -P "subvolid=\b${tl_num}\b" | cut -d' ' -f2)
+	subvol=$(echo ${LINE} | grep -P -o '(?<=path )(.*)')
+	cmd="btrfs subvolume delete ${top_level}/${subvol}"
 	if [ -z "$QUIET" ]; then
 		echo "$cmd"
 	fi
 	$cmd >/dev/null
 done
-
+rm -f $tempfile
 
 # Create new snapshot:
 cmd="btrfs subvolume snapshot -r $SOURCE $TARGET/$(date "+%F--%H-%M-%S-@${SNAP}")"
