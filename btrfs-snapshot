@@ -59,20 +59,19 @@ max_snap=$((COUNT -1))
 # Clean up older snapshots:
 tempfile=$(mktemp)
 pushd $TARGET > /dev/null
-for file in $(ls -1 | sort | grep @"${SNAP}"\$)
-do
-    fullpath=$TARGET/$file
-    btrfs subvolume show "$fullpath" >/dev/null 2>&1 && echo $fullpath
-done > $tempfile
+btrfs subvol list --sort=+path -o "$TARGET" | grep "$(basename ${TARGET})" | grep @"${SNAP}"\$ | head -n -${max_snap} > $tempfile
 popd > /dev/null
-cat $tempfile | head -n -${max_snap} | while read LINE
+cat $tempfile | while read LINE
 do
-  cmd="btrfs subvolume delete ${LINE}"
-  if [ -z "$QUIET" ]; then
-    echo "$cmd"
-  fi
-  $cmd >/dev/null
-done  
+	tl_num=$(echo ${LINE} | grep -P -o '(?<=top level )\b(\d+)\b')
+	top_level=$(cat /proc/mounts | grep -P "subvolid=\b${tl_num}\b" | cut -d' ' -f2)
+	subvol=$(echo ${LINE} | grep -P -o '(?<=path )(.*)')
+	cmd="btrfs subvolume delete ${top_level}/${subvol}"
+	if [ -z "$QUIET" ]; then
+		echo "$cmd"
+	fi
+	$cmd >/dev/null
+done
 rm -f $tempfile
 
 # Create new snapshot:
